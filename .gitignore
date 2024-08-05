@@ -1,0 +1,6 @@
+# Golang
+*.exe
+*.exe~
+
+# Jetbrains
+.idea/
