@@ -31,6 +31,7 @@ The tool then modifies the appropriate `appmanifest_*.acf` files to apply the ne
 4. Choose the desired auto-update behavior from the dropdown
 5. Click "Update Selected Library" to apply the changes
 6. View the operation log for details on the update process
+7. Restart Steam to see the changes in the steam client
 
 ## Requirements
 
