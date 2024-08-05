@@ -3,7 +3,6 @@ package main
 import (
 	"bufio"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -36,6 +35,7 @@ func main() {
 	// Log box
 	logBox := widget.NewMultiLineEntry()
 	logBox.Disable()
+	logScroll := container.NewVScroll(logBox)
 
 	// Games list
 	gamesList := widget.NewList(
@@ -46,15 +46,18 @@ func main() {
 			return len(selectedLibrary.Games)
 		},
 		func() fyne.CanvasObject {
-			return container.NewHBox(widget.NewLabel("Game"), widget.NewLabel("Auto-update"))
+			return widget.NewLabel("Game Name - Update Behavior")
 		},
 		func(id widget.ListItemID, item fyne.CanvasObject) {
 			if selectedLibrary == nil {
 				return
 			}
 			game := selectedLibrary.Games[id]
-			item.(*fyne.Container).Objects[0].(*widget.Label).SetText(game.Name)
-			item.(*fyne.Container).Objects[1].(*widget.Label).SetText(game.AutoUpdateBehavior)
+			updateBehavior := "Auto Update"
+			if game.AutoUpdateBehavior == "1" {
+				updateBehavior = "Update On Launch"
+			}
+			item.(*widget.Label).SetText(fmt.Sprintf("%s - %s", game.Name, updateBehavior))
 		},
 	)
 
@@ -72,6 +75,11 @@ func main() {
 		},
 	)
 
+	// Automatically select the first library
+	if len(libraries) > 0 {
+		librarySelect.SetSelected(libraries[0].Path)
+	}
+
 	// Update behavior selection
 	updateBehavior := widget.NewSelect(
 		[]string{"0 - Always keep this game updated", "1 - Only update this game when I launch it"},
@@ -85,7 +93,7 @@ func main() {
 			return
 		}
 		go func() {
-			updatedGames := updateLibrary(selectedLibrary, updateBehavior.Selected[:1], logBox)
+			updatedGames := updateLibrary(selectedLibrary, updateBehavior.Selected[:1], logBox, logScroll)
 			selectedLibrary.Games = updatedGames
 			for i, lib := range libraries {
 				if lib.Path == selectedLibrary.Path {
@@ -107,15 +115,14 @@ func main() {
 		updateBehavior,
 		updateButton,
 		widget.NewLabel("Operation Log:"),
-		container.NewVScroll(logBox),
+		logScroll,
 	)
 
 	// Set minimum sizes for scrollable areas
 	gamesListScroll := content.Objects[3].(*container.Scroll)
 	gamesListScroll.SetMinSize(fyne.NewSize(500, 200))
 
-	logBoxScroll := content.Objects[8].(*container.Scroll)
-	logBoxScroll.SetMinSize(fyne.NewSize(500, 100))
+	logScroll.SetMinSize(fyne.NewSize(500, 100))
 
 	w.SetContent(content)
 	w.Resize(fyne.NewSize(600, 600))
@@ -154,12 +161,17 @@ func detectSteamLibraries() []SteamLibrary {
 }
 
 func parseLibraryFoldersVDF(path string) []string {
-	libraries := []string{}
+	var libraries []string
 	file, err := os.Open(path)
 	if err != nil {
 		return libraries
 	}
-	defer file.Close()
+	defer func(file *os.File) {
+		err := file.Close()
+		if err != nil {
+			fmt.Printf(err.Error())
+		}
+	}(file)
 
 	scanner := bufio.NewScanner(file)
 	pathRegex := regexp.MustCompile(`^\s*"path"\s*"(.+)"`)
@@ -177,7 +189,7 @@ func parseLibraryFoldersVDF(path string) []string {
 func detectGames(libraryPath string) []Game {
 	var games []Game
 	steamappsPath := filepath.Join(libraryPath, "steamapps")
-	files, err := ioutil.ReadDir(steamappsPath)
+	files, err := os.ReadDir(steamappsPath)
 	if err != nil {
 		fmt.Println("Error reading steamapps directory:", err)
 		return games
@@ -198,7 +210,7 @@ func detectGames(libraryPath string) []Game {
 }
 
 func parseACF(filePath string) *Game {
-	content, err := ioutil.ReadFile(filePath)
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		fmt.Println("Error reading ACF file:", err)
 		return nil
@@ -235,7 +247,7 @@ func parseACF(filePath string) *Game {
 	return game
 }
 
-func updateLibrary(lib *SteamLibrary, newBehavior string, logBox *widget.Entry) []Game {
+func updateLibrary(lib *SteamLibrary, newBehavior string, logBox *widget.Entry, logScroll *container.Scroll) []Game {
 	steamappsPath := filepath.Join(lib.Path, "steamapps")
 	var wg sync.WaitGroup
 	updatedGames := make([]Game, len(lib.Games))
@@ -248,36 +260,36 @@ func updateLibrary(lib *SteamLibrary, newBehavior string, logBox *widget.Entry) 
 			// Find the correct appmanifest file
 			files, err := filepath.Glob(filepath.Join(steamappsPath, "appmanifest_*.acf"))
 			if err != nil {
-				logBox.SetText(logBox.Text + fmt.Sprintf("Error searching for %s: %v\n", game.Name, err))
+				appendToLog(logBox, logScroll, fmt.Sprintf("Error searching for %s: %v\n", game.Name, err))
 				return
 			}
 			for _, file := range files {
-				content, err := ioutil.ReadFile(file)
+				content, err := os.ReadFile(file)
 				if err != nil {
 					continue
 				}
 				if strings.Contains(string(content), fmt.Sprintf(`"name"		"%s"`, game.Name)) {
 					err := updateACF(file, newBehavior)
 					if err != nil {
-						logBox.SetText(logBox.Text + fmt.Sprintf("Failed to update %s: %v\n", game.Name, err))
+						appendToLog(logBox, logScroll, fmt.Sprintf("Failed to update %s: %v\n", game.Name, err))
 					} else {
-						logBox.SetText(logBox.Text + fmt.Sprintf("Successfully updated %s\n", game.Name))
+						appendToLog(logBox, logScroll, fmt.Sprintf("Successfully updated %s\n", game.Name))
 						updatedGames[i].AutoUpdateBehavior = newBehavior
 					}
 					return
 				}
 			}
-			logBox.SetText(logBox.Text + fmt.Sprintf("Failed to find appmanifest for %s\n", game.Name))
+			appendToLog(logBox, logScroll, fmt.Sprintf("Failed to find appmanifest for %s\n", game.Name))
 		}(i, game)
 	}
 	wg.Wait()
-	logBox.SetText(logBox.Text + "Update complete.\n")
+	appendToLog(logBox, logScroll, "Update complete.\n")
 
 	return updatedGames
 }
 
 func updateACF(filePath, newBehavior string) error {
-	content, err := ioutil.ReadFile(filePath)
+	content, err := os.ReadFile(filePath)
 	if err != nil {
 		return err
 	}
@@ -310,7 +322,7 @@ func updateACF(filePath, newBehavior string) error {
 			"}")
 	}
 
-	return ioutil.WriteFile(filePath, []byte(strings.Join(newLines, "\n")), 0644)
+	return os.WriteFile(filePath, []byte(strings.Join(newLines, "\n")), 0644)
 }
 
 func getLibraryPaths(libraries []SteamLibrary) []string {
@@ -319,4 +331,10 @@ func getLibraryPaths(libraries []SteamLibrary) []string {
 		paths[i] = lib.Path
 	}
 	return paths
+}
+
+func appendToLog(logBox *widget.Entry, logScroll *container.Scroll, message string) {
+	logBox.SetText(logBox.Text + message)
+	logScroll.ScrollToBottom()
+	logScroll.Refresh()
 }
