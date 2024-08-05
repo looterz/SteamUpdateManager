@@ -5,7 +5,7 @@ before:
   hooks:
     - go mod tidy
     - go install github.com/fyne-io/fyne-cross@latest
-    - fyne-cross windows -arch=amd64 -output SteamUpdateManager
+    - fyne-cross windows -arch=amd64 -app-id com.yourdomain.steamupdatemanager -icon Icon.png -output SteamUpdateManager
 
 builds:
   - skip: true
