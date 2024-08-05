@@ -11,12 +11,17 @@ builds:
   - skip: true
 
 archives:
-  - format: zip
+  - id: default
+    format: zip
     name_template: '{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}'
     files:
       - LICENSE
       - README.md
-      - fyne-cross/bin/windows-amd64/*
+      - fyne-cross/bin/windows-amd64/SteamUpdateManager.exe
+
+release:
+  extra_files:
+    - glob: ./fyne-cross/bin/windows-amd64/SteamUpdateManager.exe
 
 checksum:
   name_template: 'checksums.txt'

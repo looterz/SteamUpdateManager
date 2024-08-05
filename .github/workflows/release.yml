@@ -36,3 +36,7 @@ jobs:
           args: release --clean
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: List fyne-cross directory
+        run: |
+          ls -R fyne-cross
