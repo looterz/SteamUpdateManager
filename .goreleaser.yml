@@ -4,21 +4,11 @@ project_name: SteamUpdateManager
 before:
   hooks:
     - go mod tidy
+    - go install github.com/fyne-io/fyne-cross@latest
+    - fyne-cross windows -arch=amd64 -output SteamUpdateManager
 
 builds:
-  - id: windows-amd64
-    binary: SteamUpdateManager
-    env:
-      - CGO_ENABLED=1
-    goos:
-      - windows
-    goarch:
-      - amd64
-    hooks:
-      pre:
-        - go install github.com/fyne-io/fyne-cross@latest
-        - fyne-cross windows -arch=amd64 -output SteamUpdateManager
-    skip: true
+  - skip: true
 
 archives:
   - format: zip
@@ -26,8 +16,7 @@ archives:
     files:
       - LICENSE
       - README.md
-    builds:
-      - windows-amd64
+      - fyne-cross/bin/windows-amd64/*
 
 checksum:
   name_template: 'checksums.txt'
